@@ -1,0 +1,157 @@
+#### composer image to install composer dependencies
+FROM composer:2.7.1 AS composer
+
+##### node image to install node modules and build assets
+FROM node:22-alpine AS node
+
+RUN mkdir -p /var/www/html
+WORKDIR /var/www/html
+
+COPY . /var/www/html
+
+RUN pwd && ls -la
+
+RUN npm install && npm run build
+
+### PHP image to run the application
+FROM php:8.3-fpm-alpine3.20
+
+ARG UID=1000
+ARG GID=1000 
+ARG USER=laravelUser
+
+ENV UID=${UID}
+ENV GID=${GID}
+ENV USER=${USER}
+
+WORKDIR /var/www/html
+
+RUN delgroup dialout
+
+RUN addgroup -g ${GID} --system ${USER}
+RUN adduser -G ${USER} --system -D -s /bin/sh -u ${UID} ${USER}
+
+RUN sed -i "s/user = www-data/user = ${USER}/g" /usr/local/etc/php-fpm.d/www.conf
+RUN sed -i "s/group = www-data/group = ${USER}/g" /usr/local/etc/php-fpm.d/www.conf
+RUN echo "php_admin_flag[log_errors] = on" >> /usr/local/etc/php-fpm.d/www.conf
+
+RUN apk update && apk add --no-cache libpng libpng-dev jpeg-dev
+
+RUN docker-php-ext-configure gd --enable-gd --with-jpeg
+RUN docker-php-ext-install gd
+
+RUN docker-php-ext-install exif
+
+RUN apk add --no-cache zip libzip-dev
+RUN docker-php-ext-configure zip
+RUN docker-php-ext-install zip
+
+RUN docker-php-ext-install pdo pdo_mysql
+
+RUN mkdir -p /usr/src/php/ext/redis \
+    && curl -L https://github.com/phpredis/phpredis/archive/5.3.4.tar.gz | tar xvz -C /usr/src/php/ext/redis --strip 1 \
+    && echo 'redis' >> /usr/src/php-available-exts \
+    && docker-php-ext-install redis
+
+RUN apk add --no-cache --upgrade bash
+
+
+COPY --from=composer /usr/bin/composer /usr/bin/composer
+COPY --from=node /var/www/html .
+RUN composer install --no-dev --no-interaction --optimize-autoloader
+
+RUN chown -R ${USER}:${USER} /var/www/html/storage \
+    && chown -R ${USER}:${USER} /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/storage \
+    && chmod -R 775 /var/www/html/bootstrap/cache
+
+# Ensure startup script is executable
+COPY ./scripts/php-starter.sh /usr/local/bin/php-starter.sh
+RUN chmod +x /usr/local/bin/php-starter.sh
+
+# Set entrypoint
+CMD ["/usr/local/bin/php-starter.sh"]
+
+# COPY ./scripts/php-starter.sh php-starter.sh
+# RUN chmod +x ./scripts/php-starter.sh
+
+
+
+# RUN ./scripts/php-starter.sh
+
+# CMD ["./scripts/php-starter.sh"]
+# ./scripts/php-starter.sh", "&&", 
+# CMD ["php-fpm", "-y", "/usr/local/etc/php-fpm.conf", "-R"]
+# CMD ["./scripts/php-starter.sh"]
+
+
+
+
+# #### Composer image to install dependencies
+# FROM composer:2.7.1 AS composer
+
+# ##### Node image to install node modules and build assets
+# FROM node:22-alpine AS node
+
+# WORKDIR /var/www/html
+# COPY . /var/www/html
+
+# RUN npm install && npm run build
+
+# ### PHP image to run the application
+# FROM php:8.3-fpm-alpine3.20
+
+# # Define user and group
+# ARG UID=1000
+# ARG GID=1000 
+# ARG USER=laravelUser
+
+# ENV UID=${UID}
+# ENV GID=${GID}
+# ENV USER=${USER}
+
+# WORKDIR /var/www/html
+
+# # Remove unused dialout group
+# RUN delgroup dialout || true
+
+# # Create user and group
+# RUN addgroup -g ${GID} --system ${USER} \
+#     && adduser -G ${USER} --system -D -s /bin/sh -u ${UID} ${USER}
+
+# # Set user for PHP-FPM
+# RUN sed -i "s/user = www-data/user = ${USER}/g" /usr/local/etc/php-fpm.d/www.conf \
+#     && sed -i "s/group = www-data/group = ${USER}/g" /usr/local/etc/php-fpm.d/www.conf \
+#     && echo "php_admin_flag[log_errors] = on" >> /usr/local/etc/php-fpm.d/www.conf
+
+# # Install dependencies
+# RUN apk update && apk add --no-cache \
+#     libpng libpng-dev jpeg-dev zip libzip-dev bash
+
+# # Install PHP extensions
+# RUN docker-php-ext-configure gd --enable-gd --with-jpeg \
+#     && docker-php-ext-install gd exif zip pdo pdo_mysql
+
+# # Install Redis extension
+# RUN mkdir -p /usr/src/php/ext/redis \
+#     && curl -L https://github.com/phpredis/phpredis/archive/5.3.4.tar.gz | tar xvz -C /usr/src/php/ext/redis --strip 1 \
+#     && echo 'redis' >> /usr/src/php-available-exts \
+#     && docker-php-ext-install redis
+
+# # Copy composer and node build
+# COPY --from=composer /usr/bin/composer /usr/bin/composer
+# COPY --from=node /var/www/html .
+
+# # Install PHP dependencies
+# RUN composer install --no-dev --no-interaction --optimize-autoloader
+
+# # Set correct permissions for Laravel storage and cache
+# RUN chown -R ${USER}:${USER} /var/www/html/storage /var/www/html/bootstrap/cache \
+#     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+# # Ensure startup script is executable
+# COPY ./scripts/php-starter.sh /usr/local/bin/php-starter.sh
+# RUN chmod +x /usr/local/bin/php-starter.sh
+
+# # Set entrypoint
+# CMD ["/usr/local/bin/php-starter.sh"]
