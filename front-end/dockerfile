@@ -1,58 +1,44 @@
-# Base on Node.js Alpine for a smaller footprint
-FROM node:18-alpine AS base
-
-# Install dependencies only when needed
-FROM base AS deps
+# Stage 1: Install dependencies
+FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Install Netcat, Curl (optional debugging tools)
+RUN apk add --no-cache netcat-openbsd curl
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
+# Copy only the package files first for efficient caching
+COPY package.json package-lock.json ./
 
-# Rebuild the source code only when needed
-FROM base AS builder
+# Install dependencies without dev dependencies
+RUN npm ci --omit=dev
+
+# Stage 2: Build the Next.js app
+FROM node:20-alpine AS builder
 WORKDIR /app
+
+# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
+
+# Copy the rest of the application
 COPY . .
 
-# Next.js collects anonymous telemetry data - disable it
-ENV NEXT_TELEMETRY_DISABLED 1
+# Set production environment
+ENV NODE_ENV=production
 
-# Build the application
-RUN npm run build
+# Build Next.js app
+RUN npm run build && rm -rf node_modules
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# Stage 3: Run the Next.js app (Final lightweight image)
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
-
-# Create a non-root user to run the app and own app files
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Copy built app
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+# Copy only necessary files from builder stage
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=deps /app/node_modules ./node_modules 
 
-# Copy any standalone config files if they exist
-COPY --from=builder /app/next.config.mjs ./
-COPY --from=builder /app/.env* ./
-
-# Switch to non-root user
-USER nextjs
-
-# Expose the port the app will run on
+# Expose Next.js port
 EXPOSE 3000
 
-# Start the app
+# Start the Next.js app
 CMD ["npm", "start"]

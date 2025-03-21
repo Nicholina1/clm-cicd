@@ -1,64 +1,48 @@
-FROM php:8.2-fpm
+# Stage 1: Build environment
+FROM php:8.3-cli AS builder
 
-# Set working directory
-WORKDIR /var/www/html
-
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpng-dev \
-    libjpeg62-turbo-dev \
-    libfreetype6-dev \
-    locales \
-    zip \
-    jpegoptim optipng pngquant gifsicle \
-    vim \
-    unzip \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    curl \
-    libzip-dev \
-    libonig-dev \
-    libicu-dev
+    libpng-dev libjpeg-dev libfreetype6-dev \
+    zip unzip libzip-dev \
+    libpq-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) gd zip pdo_pgsql pgsql exif
 
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+# Enable required PHP extensions
+RUN docker-php-ext-enable gd zip exif
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring zip exif pcntl
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg
-RUN docker-php-ext-install gd
-RUN docker-php-ext-install intl
+WORKDIR /var/www
+COPY . /var/www
 
-# Install composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Install Composer and Laravel dependencies
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+    && composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
 
-# Add user for laravel application
-RUN groupadd -g 1000 www
-RUN useradd -u 1000 -ms /bin/bash -g www www
+# Stage 2: Production environment
+FROM php:8.3-cli
 
-# Copy existing application directory contents
-COPY . /var/www/html
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client netcat-traditional \
+    libpng16-16 libjpeg62-turbo libzip4 libfreetype6 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Copy necessary files from builder stage
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
+COPY --from=builder /var/www /var/www
 
+WORKDIR /var/www
+# Set permissions for storage and bootstrap/cache
+RUN chmod -R 775 storage bootstrap/cache
 
-# Copy existing application directory permissions
-COPY --chown=www:www . /var/www/html
+# Set entrypoint script
+COPY ./php-starter.sh /usr/local/bin/php-starter.sh
+RUN chmod +x /usr/local/bin/php-starter.sh
+ENTRYPOINT ["/usr/local/bin/php-starter.sh"]
 
-# Change current user to www
-USER www
-
-
-# Create bootstrap/cache directory if it doesn't exist and set permissions
-RUN mkdir -p /var/www/html/bootstrap/cache
-RUN chmod -R 775 /var/www/html/bootstrap/cache
-RUN chmod -R 775 /var/www/html/storage
-
-# Install Laravel dependencies
-RUN composer install --no-interaction --no-dev --optimize-autoloader
-
-# Generate application key
-RUN php artisan key:generate --force
-
-# Expose port 9000 and start php-fpm server
-EXPOSE 9000
-CMD ["php-fpm"]
+# Expose port and run Laravel's built-in server
+EXPOSE 8000
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
