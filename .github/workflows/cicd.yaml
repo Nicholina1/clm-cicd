@@ -18,13 +18,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
           tools: composer, phpcs
+
+      - name: Ensure bootstrap/cache Exists
+        run: |
+          mkdir -p $LARAVEL_DIR/bootstrap/cache
+          chmod -R 775 $LARAVEL_DIR/bootstrap/cache
+
+      - name: Cache Composer Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.LARAVEL_DIR }}/vendor
+          key: composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install PHP Dependencies
+        run: |
+          cd $LARAVEL_DIR
+          composer install --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -53,31 +70,19 @@ jobs:
             exit 1
           fi
 
-      - name: Cache Composer Dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.composer/cache
-          key: composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: composer-
+      - name: Install PHPCS Globally (if needed)
+        run: |
+          if ! command -v phpcs &> /dev/null; then
+            composer global require "squizlabs/php_codesniffer=*"
+          fi
 
-      - name: Install PHP Dependencies & Run PHPCS
+      - name: Run PHPCS
         run: |
           cd $LARAVEL_DIR
-          if [ -f "composer.json" ]; then
-            echo "composer.json found. Installing dependencies..."
-            composer install --no-interaction --prefer-dist --optimize-autoloader
-
-            echo "Running PHP CodeSniffer (PHPCS)..."
-            if [ -f "vendor/bin/phpcs" ]; then
-              vendor/bin/phpcs --standard=PSR12 app/
-            else
-              echo "PHPCS not found. Installing globally..."
-              composer global require "squizlabs/php_codesniffer=*"
-              ~/.composer/vendor/bin/phpcs --standard=PSR12 app/
-            fi
+          if [ -f "vendor/bin/phpcs" ]; then
+            vendor/bin/phpcs --standard=PSR12 app/
           else
-            echo "Error: composer.json not found in $LARAVEL_DIR"
-            exit 1
+            ~/.composer/vendor/bin/phpcs --standard=PSR12 app/
           fi
 
       - name: Cache npm Dependencies
@@ -91,9 +96,9 @@ jobs:
         run: |
           cd $NEXTJS_DIR
           if [ -f "package.json" ]; then
-            echo "package.json found. Installing dependencies..."
+            echo "Installing JavaScript dependencies..."
             npm install
-            echo "Running Linting..."
+            echo "Running Lint..."
             npm run lint
           else
             echo "Error: package.json not found in $NEXTJS_DIR"
@@ -111,6 +116,7 @@ jobs:
             exit 1
           fi
 
+      # Uncomment if you want Next.js tests to run
       # - name: Run Next.js Tests
       #   run: |
       #     cd $NEXTJS_DIR
