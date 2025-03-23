@@ -1,33 +1,9 @@
-# version: "3.8"
 services:
-  backend:
-    container_name: clm_backend
-    build:
-      context: ./back-end
-      dockerfile: dockerfiles/php.dockerfile
-      # args:
-      #   UID: ${UID}
-      #   GID: ${GID}
-      #   USER: ${USER}
-    env_file:
-      - ./back-end/.env
-    # volumes:
-    #   - ./back-end:/var/www/html
-    expose:
-      - "80"
-    networks:
-      - clm-network
-    depends_on:
-      - mysql
-
   frontend:
     container_name: clm_frontend
     build: 
       context: ./front-end
-      dockerfile: dockerfile
-    container_name: frontend-clm
-    networks:
-      - clm-network
+      dockerfile: Dockerfile
     env_file:
       - ./front-end/.env
     ports:
@@ -39,100 +15,45 @@ services:
     networks:
       - clm-network
 
-
-  nginx:
-    container_name: fullstack_nginx
+  backend:
+    container_name: clm_backend
     build:
       context: ./back-end
-      dockerfile: dockerfiles/nginx.dockerfile
-      # args:
-      #   UID: ${UID}
-      #   GID: ${GID}
-      #   USER: ${USER}
-    ports:
-      - "8000:80"
-    # volumes:
-    #   - ./back-end:/var/www/html
-    #   - ./back-end/dockerfiles/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    networks:
-      - clm-network
-    depends_on:
-      - backend
-
-  # composer:
-  #   container_name: fullstack_composer
-  #   build:
-  #     context: ./back-end/dockerfiles
-  #     dockerfile: composer.dockerfile
-  #     args:
-  #       UID: ${UID}
-  #       GID: ${GID}
-  #       USER: ${USER}
-  #   # volumes:
-  #   #   - ./back-end:/var/www/html
-  #   # depends_on:
-  #   #   - php
-  #   networks:
-  #     - backend
-  # artisan:
-  #   build:
-  #     context: ./back-end
-  #     dockerfile: dockerfiles/php.dockerfile
-  #   # volumes:
-  #   #   - ./back-end:/var/www/html
-  #   entrypoint: ["php", "/var/www/html/artisan"]
-  #depends_on:
-  #- mysql
-
-  mysql:
-    image: mysql:8.0.1
-    restart: unless-stopped
-    tty: true
-    init: true
-    container_name: fullstack_db
+      dockerfile: Dockerfile
     env_file:
       - ./back-end/.env
+    ports:
+      - "8000:8000"
     environment:
-      MYSQL_DATABASE: CLM_DB 
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_PASSWORD: root
-      MYSQL_USER: root
-    expose:
-      - "3306"
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: laravel
+      DB_USERNAME: postgres
+      DB_PASSWORD: secret
+    depends_on:
+      - db
+    volumes:
+      - ./back-end:/var/www  
+      - ./back-end/storage:/var/www/storage  
     networks:
       - clm-network
-    # volumes:
-    #   - ./back-end/mysql_data:/var/lib/mysql
 
-  # redis:
-  #   container_name: fullstack_redis
-  #   image: redis:alpine
-  #   expose:
-  #     - "6379"
-  #   networks:
-  #     - backend
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: laravel
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - clm-network
 
-  # npm:
-  #   image: node:14-alpine
-  #   working_dir: /var/www/html
-  #   entrypoint: ["npm"]
-  # volumes:
-  #   - ./src:/var/www/html
-
-  ############ configuring the front-end service ############
-  # node:
-  #   container_name: fullstack_node
-  #   build:
-  #     context: ./front-end
-  #     dockerfile: frontend.Dockerfile
-  #   env_file:
-  #     - ./front-end/.env
-  #   expose:
-  #     - "3000"
-  #   networks:
-  #     - backend
-  #   depends_on:
-  #     - php
+volumes:
+  postgres_data:
+    driver: local
 
 networks:
   clm-network:

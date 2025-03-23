@@ -1,0 +1,89 @@
+name: CI Pipeline
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  LARAVEL_DIR: './back-end'
+  NEXTJS_DIR: './front-end'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Verify Tools
+        run: |
+          node -v
+          npm -v
+          php -v
+          composer --version
+          docker --version
+
+      - name: Debugging Directory Structure
+        run: |
+          ls -la
+          ls -la $LARAVEL_DIR || true
+          ls -la $NEXTJS_DIR || true
+
+      - name: Verify Directories
+        run: |
+          if [ ! -d "$LARAVEL_DIR" ]; then
+            echo "Directory $LARAVEL_DIR does not exist."
+            exit 1
+          fi
+          if [ ! -d "$NEXTJS_DIR" ]; then
+            echo "Directory $NEXTJS_DIR does not exist."
+            exit 1
+          fi
+
+      - name: PHP Lint
+        run: |
+          cd $LARAVEL_DIR
+          if [ -f "composer.json" ]; then
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+            vendor/bin/phpcs --standard=PSR12 app/
+          else
+            echo "composer.json not found in $LARAVEL_DIR"
+            exit 1
+          fi
+
+      - name: JavaScript/TypeScript Lint
+        run: |
+          cd $NEXTJS_DIR
+          if [ -f "package.json" ]; then
+            npm install
+            npm run lint
+          else
+            echo "package.json not found in $NEXTJS_DIR"
+            exit 1
+          fi
+
+      - name: PHP Tests
+        run: |
+          cd $LARAVEL_DIR
+          if [ -f "composer.json" ]; then
+            php artisan test
+          else
+            echo "composer.json not found in $LARAVEL_DIR"
+            exit 1
+          fi
+
+      # - name: Next.js Tests
+      #   run: |
+      #     cd $NEXTJS_DIR
+      #     if [ -f "package.json" ]; then
+      #       npm run test
+      #     else
+      #       echo "package.json not found in $NEXTJS_DIR"
+      #       exit 1
+      #     fi
+
+  
