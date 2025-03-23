@@ -70,10 +70,18 @@ jobs:
             exit 1
           fi
 
-      - name: Install PHPCS Globally (if needed)
+      - name: Install PHPCS Globally
+        run: |
+          composer global require "squizlabs/php_codesniffer=*"
+          export PATH="$HOME/.composer/vendor/bin:$PATH"
+
+      - name: Verify PHPCS Installation
         run: |
           if ! command -v phpcs &> /dev/null; then
-            composer global require "squizlabs/php_codesniffer=*"
+            echo "Error: phpcs is not installed or not in PATH."
+            exit 1
+          else
+            echo "phpcs is available at: $(which phpcs)"
           fi
 
       - name: Run PHPCS
@@ -82,7 +90,7 @@ jobs:
           if [ -f "vendor/bin/phpcs" ]; then
             vendor/bin/phpcs --standard=PSR12 app/
           else
-            ~/.composer/vendor/bin/phpcs --standard=PSR12 app/
+            $HOME/.composer/vendor/bin/phpcs --standard=PSR12 app/
           fi
 
       - name: Cache npm Dependencies
