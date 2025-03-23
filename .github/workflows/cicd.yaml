@@ -99,6 +99,11 @@ jobs:
           path: ${{ env.NEXTJS_DIR }}/node_modules
           key: npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: npm-
+          
+      - name: Fix npm Vulnerabilities
+        run: |
+          cd $NEXTJS_DIR
+          npm audit fix
 
       - name: Install JS Dependencies & Run Lint
         run: |
