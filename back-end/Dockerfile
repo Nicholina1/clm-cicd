@@ -36,7 +36,8 @@ COPY --from=builder /var/www /var/www
 
 WORKDIR /var/www
 # Set permissions for storage and bootstrap/cache
-RUN chmod -R 775 storage bootstrap/cache
+RUN chmod -R 775 storage 
+RUN chmod -R 775 bootstrap/cache
 
 # Set entrypoint script
 COPY ./php-starter.sh /usr/local/bin/php-starter.sh
