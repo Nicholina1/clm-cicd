@@ -1,0 +1,11 @@
+FROM postgres:15
+# Set environment variables
+ENV POSTGRES_USER=postgress \
+    POSTGRES_PASSWORD=secret \
+    POSTGRES_DB=laravel
+
+# Expose PostgreSQL default port
+EXPOSE 5432
+
+# Use official entrypoint
+CMD ["postgres"]

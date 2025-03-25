@@ -1,142 +1,85 @@
-name: CI Pipeline
+name: Docker Build and Push
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 env:
-  LARAVEL_DIR: './back-end'
-  NEXTJS_DIR: './front-end'
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
+  TIMESTAMP: ${{ github.run_id }}-${{ github.run_number }}
+  
+  # Production deployment configuration (recommended)
+  BACKEND_API_HOST: https://api.yourdomain.com  # CHANGE TO YOUR PRODUCTION URL
+  DB_HOST: your-database-host.com              # CHANGE TO YOUR DB HOST
+
+  # OR for Docker network deployment (alternative):
+  # BACKEND_API_HOST: http://laravel-backend:8000
+  # DB_HOST: postgres-db
+
+  # Common configuration
+  DB_CONNECTION: pgsql
+  DB_PORT: 5432
+  DB_DATABASE: laravel
+  DB_USERNAME: postgres
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up PHP 8.3
-        uses: shivammathur/setup-php@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
         with:
-          php-version: '8.3'
-          tools: composer, phpcs
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ env.DOCKER_HUB_TOKEN }}
 
-      - name: Ensure bootstrap/cache Exists
-        run: |
-          mkdir -p $LARAVEL_DIR/bootstrap/cache
-          chmod -R 775 $LARAVEL_DIR/bootstrap/cache
-
-      - name: Cache Composer Dependencies
-        uses: actions/cache@v3
+      - name: Build and push PostgreSQL image
+        uses: docker/build-push-action@v4
         with:
-          path: ${{ env.LARAVEL_DIR }}/vendor
-          key: composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: composer-
+          context: .
+          file: ./Dockerfile.Postgres
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:${{ env.TIMESTAMP }}
+          build-args: |
+            POSTGRES_USER=${{ env.DB_USERNAME }}
+            POSTGRES_DB=${{ env.DB_DATABASE }}
+          secrets: |
+            POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
 
-      - name: Install PHP Dependencies
-        run: |
-          cd $LARAVEL_DIR
-          composer install --no-interaction --prefer-dist --optimize-autoloader
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Build and push Laravel back-end
+        uses: docker/build-push-action@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ${{ env.NEXTJS_DIR }}/package-lock.json
+          context: ./back-end
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:${{ env.TIMESTAMP }}
+          build-args: |
+            APP_ENV=production
+            DB_CONNECTION=${{ env.DB_CONNECTION }}
+            DB_HOST=${{ env.DB_HOST }}
+            DB_PORT=${{ env.DB_PORT }}
+            DB_DATABASE=${{ env.DB_DATABASE }}
+            DB_USERNAME=${{ env.DB_USERNAME }}
+          secrets: |
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
 
-      - name: Debugging - Verify Directories
-        run: |
-          echo "Project Root:"
-          ls -la
-          echo "Laravel Directory:"
-          ls -la $LARAVEL_DIR || true
-          echo "Next.js Directory:"
-          ls -la $NEXTJS_DIR || true
-
-      - name: Verify Required Directories
-        run: |
-          if [ ! -d "$LARAVEL_DIR" ]; then
-            echo "Error: Directory $LARAVEL_DIR does not exist."
-            exit 1
-          fi
-          if [ ! -d "$NEXTJS_DIR" ]; then
-            echo "Error: Directory $NEXTJS_DIR does not exist."
-            exit 1
-          fi
-
-      - name: Install PHPCS Globally
-        run: |
-          composer global require "squizlabs/php_codesniffer=*"
-          export PATH="$HOME/.composer/vendor/bin:$PATH"
-
-      - name: Verify PHPCS Installation
-        run: |
-          if ! command -v phpcs &> /dev/null; then
-            echo "Error: phpcs is not installed or not in PATH."
-            exit 1
-          else
-            echo "phpcs is available at: $(which phpcs)"
-          fi
-
-      - name: Run PHPCS
-        run: |
-          cd $LARAVEL_DIR
-          if [ -f "vendor/bin/phpcs" ]; then
-            vendor/bin/phpcs --standard=PSR12 app/
-          else
-            $HOME/.composer/vendor/bin/phpcs --standard=PSR12 app/
-          fi
-
-      - name: Cache npm Dependencies
-        uses: actions/cache@v3
+      - name: Build and push Next.js front-end
+        uses: docker/build-push-action@v4
         with:
-          path: ${{ env.NEXTJS_DIR }}/node_modules
-          key: npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: npm-
-
-      # - name: Fix npm Vulnerabilities
-      #   run: |
-      #     cd $NEXTJS_DIR
-      #     npm audit fix
-
-      - name: Install JS Dependencies & Run Lint
-        run: |
-          cd $NEXTJS_DIR
-          if [ -f "package.json" ]; then
-            echo "Installing JavaScript dependencies..."
-            npm install
-            echo "Running Lint..."
-            npm run lint
-          else
-            echo "Error: package.json not found in $NEXTJS_DIR"
-            exit 1
-          fi
-
-      - name: Run Laravel Tests
-        run: |
-          cd $LARAVEL_DIR
-          if [ -f "composer.json" ]; then
-            echo "Running Laravel Tests..."
-            php artisan test
-          else
-            echo "Error: composer.json not found in $LARAVEL_DIR"
-            exit 1
-          fi
-
-      # Uncomment if you want Next.js tests to run
-      # - name: Run Next.js Tests
-      #   run: |
-      #     cd $NEXTJS_DIR
-      #     if [ -f "package.json" ]; then
-      #       echo "Running Next.js Tests..."
-      #       npm run test
-      #     else
-      #       echo "Error: package.json not found in $NEXTJS_DIR"
-      #       exit 1
-      #     fi
+          context: ./front-end
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:${{ env.TIMESTAMP }}
+          build-args: |
+            BACKEND_API_HOST=${{ env.BACKEND_API_HOST }}
