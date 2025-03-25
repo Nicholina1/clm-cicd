@@ -25,7 +25,9 @@ COPY . .
 ENV NODE_ENV=production
 
 # Build Next.js app
-RUN npm install && npm run build && rm -rf node_modules
+RUN npm install  rm 
+RUN npm run build
+RUN npm -rf node_modules
 
 # Stage 3: Run the Next.js app (Final lightweight image)
 FROM node:20-alpine AS runner
