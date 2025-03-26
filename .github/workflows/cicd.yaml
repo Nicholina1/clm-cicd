@@ -126,17 +126,16 @@ jobs:
           # role-session-name: github-actions-${{ github.repository }}-${{ github.run_id }}
           # audience: sts.amazonaws.com
 
-      - name: Verify AWS credentials
+      - name: Install SSH key
         run: |
-          # Check if credentials are properly loaded
-          if [ -z "$ACCESS_KEY" ]; then
-            echo "AWS credentials not loaded"
-            exit 1
-          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CLM_CICD_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.IP }} >> ~/.ssh/known_hosts
 
-          # Test AWS CLI access
-          aws sts get-caller-identity
-          echo "✅ Successfully authenticated to AWS"
+      - name: Test SSH Connection to EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ubuntu@${{ secrets.IP }} "echo '✅ SSH Connection Successful'"
 
     #   - name: Install SSH Key
     #     uses: shimataro/ssh-key-action@v2
