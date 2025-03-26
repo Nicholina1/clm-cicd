@@ -108,6 +108,9 @@ jobs:
   #         ssh -o StrictHostKeyChecking=no -i ~/.ssh/clm_cicd_key.pem ubuntu@${{ secrets.CLM_CICD_KEY}} "echo 'Successfully connected to EC2!'"
 
   deploy-to-ec2:
+    permissions:
+      id-token: write
+      contents: read
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
@@ -119,9 +122,9 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: ${{ secrets.REGION }}
-          role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/github_role
-          role-session-name: github-actions-${{ github.repository }}-${{ github.run_id }}
-          audience: sts.amazonaws.com
+          role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/githubaction_role
+          # role-session-name: github-actions-${{ github.repository }}-${{ github.run_id }}
+          # audience: sts.amazonaws.com
 
       - name: Verify AWS credentials
         run: |
