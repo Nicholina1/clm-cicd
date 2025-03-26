@@ -83,3 +83,96 @@ jobs:
             ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:${{ env.TIMESTAMP }}
           build-args: |
             BACKEND_API_HOST=${{ env.BACKEND_API_HOST }}
+
+
+
+
+
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.REGION }}
+
+      - name: Connect to EC2 and verify access
+        run: |
+          echo "Attempting to connect to EC2 instance..."
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/clm_cicd_key.pem ubuntu@${{ secrets.CLM_CICD_KEY}} "echo 'Successfully connected to EC2!'"
+
+    #   - name: Install SSH Key
+    #     uses: shimataro/ssh-key-action@v2
+    #     with:
+    #       key: ${{ secrets.EC2_SSH_KEY }}
+    #       known_hosts: ${{ secrets.EC2_KNOWN_HOSTS }}
+
+    #   - name: Prepare Deployment Files
+    #     run: |
+    #       # Create production environment file
+    #       cat <<EOF > .env.production
+    #       COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}
+    #       TAG=${{ env.TIMESTAMP }}
+    #       DOCKER_HUB_USERNAME=${{ env.DOCKER_HUB_USERNAME }}
+    #       DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+    #       EOF
+
+    #       # Create deployment script
+    #       cat <<'EOF' > deploy.sh
+    #       #!/bin/bash
+    #       cd $DEPLOY_DIR || exit 1
+          
+    #       echo "=== Logging in to Docker Hub ==="
+    #       docker login -u $DOCKER_HUB_USERNAME -p $DOCKER_HUB_TOKEN
+          
+    #       echo "=== Pulling new images ==="
+    #       docker compose -f docker-compose.prod.yml pull
+          
+    #       echo "=== Stopping old containers ==="
+    #       docker compose -f docker-compose.prod.yml down
+          
+    #       echo "=== Starting new containers ==="
+    #       docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          
+    #       echo "=== Cleaning up ==="
+    #       docker system prune -af
+          
+    #       echo "=== Current running containers ==="
+    #       docker ps --filter "name=$COMPOSE_PROJECT_NAME" --format "table {{.Names}}\t{{.Status}}"
+    #       EOF
+    #       chmod +x deploy.sh
+
+    #   - name: Copy Files to EC2
+    #     run: |
+    #       scp -o StrictHostKeyChecking=no \
+    #         docker-compose.prod.yml \
+    #         ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_DIR }}/
+          
+    #       scp -o StrictHostKeyChecking=no \
+    #         .env.production \
+    #         ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_DIR }}/
+          
+    #       scp -o StrictHostKeyChecking=no \
+    #         deploy.sh \
+    #         ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_DIR }}/
+
+    #   - name: Execute Deployment
+    #     run: |
+    #       ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOF'
+    #         cd $DEPLOY_DIR
+    #         chmod +x deploy.sh
+    #         ./deploy.sh
+    #       EOF
+
+    #   - name: Verify Deployment
+    #     run: |
+    #       ssh -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} "
+    #         curl -s http://localhost:3000/health || echo 'Frontend not responding'
+    #         curl -s http://localhost:8000/health || echo 'Backend not responding'
+    #       "
