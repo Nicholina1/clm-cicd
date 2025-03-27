@@ -108,17 +108,39 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           echo "${{ secrets.IP }}" > ~/.ssh/known_hosts
 
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          # Properly format the private key
+          echo "${{ secrets.CLM_CICD_KEY }}" | sed 's/\\n/\n/g' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Verify key looks correct
+          echo "SSH key contents:"
+          head -3 ~/.ssh/id_rsa
+          
+          # Add EC2 to known hosts
+          ssh-keyscan -H ${{ secrets.IP }} >> ~/.ssh/known_hosts
+          echo "Known hosts:"
+          cat ~/.ssh/known_hosts
+
+      - name: Test SSH connection
+        run: |
+          echo "Testing SSH connection to ${{ secrets.IP }}..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ secrets.IP }} "echo 'SSH connection successful!'"
+
       - name: Deploy Application
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ env.SSH_USER }}@${{ secrets.IP }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ secrets.IP }} << 'DEPLOY'
           set -ex
-
+          echo "Starting deployment on $(hostname)"
+          
           # Create app directory
           mkdir -p ~/app
           cd ~/app
-
-          # Create production compose file
-          cat > ${{ env.COMPOSE_FILE }} << 'EOT'
+          
+          # Create docker-compose file
+          cat > ${{ env.COMPOSE_FILE }} << 'COMPOSE'
           version: '3.8'
           services:
             postgres:
@@ -129,22 +151,14 @@ jobs:
               volumes:
                 - pgdata:/var/lib/postgresql/data
               
-
             backend:
               image: ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
               restart: always
               depends_on:
-                postgres:
-                  condition: service_healthy
-              environment:
-                APP_ENV: production
-                DB_HOST: ${{ env.DB_HOST }}
-                DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-                APP_KEY: ${{ secrets.APP_KEY }}
+                - postgres
               ports:
                 - "8000:8000"
-             
-
+              
             frontend:
               image: ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
               restart: always
@@ -152,29 +166,27 @@ jobs:
                 - "3000:3000"
               depends_on:
                 - backend
-
+          
           volumes:
             pgdata:
-          EOT
-
+          COMPOSE
+          
           # Login to Docker Hub
           echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u ${{ env.DOCKER_HUB_USERNAME }} --password-stdin
-
+          
           # Pull and deploy
           docker compose -f ${{ env.COMPOSE_FILE }} pull
           docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans
           docker compose -f ${{ env.COMPOSE_FILE }} up -d
-
-          # Run migrations
-          sleep 10  # Wait for services to start
-          docker compose -f ${{ env.COMPOSE_FILE }} exec backend php artisan migrate --force
-
+          
           # Verify deployment
-          echo "=== Deployment Status ==="
-          docker compose -f ${{ env.COMPOSE_FILE }} ps -a
-          echo "=== Service Logs ==="
-          docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=50
-          EOF
+          echo "Current containers:"
+          docker ps -a
+          echo "Frontend status:"
+          curl -I http://localhost:3000 || echo "Frontend not responding"
+          echo "Backend status:"
+          curl -I http://localhost:8000 || echo "Backend not responding"
+          DEPLOY
 
 
 
