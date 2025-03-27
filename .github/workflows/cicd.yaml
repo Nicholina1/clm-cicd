@@ -9,7 +9,8 @@ env:
   DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_USERNAME }}
   DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
   TIMESTAMP: ${{ github.run_id }}-${{ github.run_number }}
-  
+  COMPOSE_FILE: docker-compose.prod.yml
+
   # Production deployment configuration (recommended)
   BACKEND_API_HOST: https://api.yourdomain.com  # CHANGE TO YOUR PRODUCTION URL
   DB_HOST: your-database-host.com              # CHANGE TO YOUR DB HOST
@@ -133,25 +134,120 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.IP }} >> ~/.ssh/known_hosts
 
-      - name: Test SSH Connection to EC2
+      - name: Deploy with Docker Compose
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ubuntu@${{ secrets.IP }} "echo '✅ SSH Connection Successful'"
+           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ubuntu@${{ secrets.IP }} 
+           << 'EOF'
+            set -e  # Exit immediately if any command fails
+            
+            # Login to Docker Hub
+            echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u ${{ env.DOCKER_HUB_USERNAME }} --password-stdin
 
-    #   - name: Install SSH Key
-    #     uses: shimataro/ssh-key-action@v2
-    #     with:
-    #       key: ${{ secrets.EC2_SSH_KEY }}
-    #       known_hosts: ${{ secrets.EC2_KNOWN_HOSTS }}
+            # Create directory for app if it doesn't exist
+            mkdir -p ~/app
 
-    #   - name: Prepare Deployment Files
-    #     run: |
-    #       # Create production environment file
-    #       cat <<EOF > .env.production
-    #       COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}
-    #       TAG=${{ env.TIMESTAMP }}
-    #       DOCKER_HUB_USERNAME=${{ env.DOCKER_HUB_USERNAME }}
-    #       DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-    #       EOF
+            # Create/update docker-compose.prod.yml
+            cat > ~/app/${{ env.COMPOSE_FILE }} << 'EOT'
+            
+            services:
+              postgres:
+                image: ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
+                restart: always
+                environment:
+                  POSTGRES_USER: ${{ env.DB_USERNAME }}
+                  POSTGRES_DB: ${{ env.DB_DATABASE }}
+                  POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+                ports:
+                  - "5432:5432"
+                volumes:
+                  - pgdata:/var/lib/postgresql/data
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U ${{ env.DB_USERNAME }} -d ${{ env.DB_DATABASE }}"]
+                  interval: 5s
+                  timeout: 5s
+                  retries: 5
+              
+              backend:
+                image: ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+                restart: always
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                environment:
+                  APP_ENV: production
+                  DB_CONNECTION: ${{ env.DB_CONNECTION }}
+                  DB_HOST: ${{ env.DB_HOST }}
+                  DB_PORT: ${{ env.DB_PORT }}
+                  DB_DATABASE: ${{ env.DB_DATABASE }}
+                  DB_USERNAME: ${{ env.DB_USERNAME }}
+                  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+                ports:
+                  - "8000:8000"
+                # healthcheck:
+                #   test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+                #   interval: 30s
+                #   timeout: 10s
+                #   retries: 3
+              
+            #   frontend:
+            #     image: ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
+            #     restart: always
+            #     environment:
+            #       NEXT_PUBLIC_BACKEND_API_HOST: http://backend:8000
+            #     ports:
+            #       - "3000:3000"
+            #     depends_on:
+            #       - backend
+            
+            volumes:
+              pgdata:
+            EOT
+
+            # Change to app directory
+            cd ~/app
+
+            # Pull latest images
+            docker compose -f ${{ env.COMPOSE_FILE }} pull
+
+            # Deploy services
+            docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d
+
+            # Run database migrations (if needed)
+            docker compose -f ${{ env.COMPOSE_FILE }} exec backend php artisan migrate --force
+
+            # Verify deployment
+            echo "Deployment status:"
+            docker ps -a
+            # echo "Frontend health check:"
+            # curl -I http://localhost:3000 || true
+           EOF
+
+
+
+
+
+
+      # - name: Test SSH Connection to EC2
+      #   run: |
+      #     ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ubuntu@${{ secrets.IP }} "echo '✅ SSH Connection Successful'"
+
+      # - name: Install SSH Key
+      #   uses: shimataro/ssh-key-action@v2
+      #   with:
+      #     key: ${{ secrets.CLM_CICD_KEY }}
+      #     known_hosts: ${{ secrets.IP }}
+
+      # - name: Prepare Deployment Files
+      #   run: |
+      #     # Create production environment file
+      #     cat <<EOF > .env.production
+      #     COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}
+      #     TAG=${{ env.TIMESTAMP }}
+      #     DOCKER_HUB_USERNAME=${{ env.DOCKER_HUB_USERNAME }}
+      #     DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+      #     EOF
 
     #       # Create deployment script
     #       cat <<'EOF' > deploy.sh
