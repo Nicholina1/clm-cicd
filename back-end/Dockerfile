@@ -3,6 +3,7 @@ FROM php:8.3-cli AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     git \
     libpng-dev libjpeg-dev libfreetype6-dev \
     zip unzip libzip-dev \
@@ -14,6 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN docker-php-ext-enable gd zip exif
 
 WORKDIR /var/www
+
+# COPY . /var/www
 
 # Copy only composer files first for caching
 COPY composer.json composer.lock /var/www/
