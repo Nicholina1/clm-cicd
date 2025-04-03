@@ -14,11 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN docker-php-ext-enable gd zip exif
 
 WORKDIR /var/www
-COPY . /var/www
+
+# Copy only composer files first for caching
+COPY composer.json composer.lock /var/www/
 
 # Install Composer and Laravel dependencies
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
-     composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
+    && composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
 
 # Stage 2: Production environment
 FROM php:8.3-cli
@@ -35,9 +37,9 @@ COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 COPY --from=builder /var/www /var/www
 
 WORKDIR /var/www
+
 # Set permissions for storage and bootstrap/cache
-RUN chmod -R 775 storage 
-# RUN chmod -R 775 bootstrap/cache
+RUN chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 
 # Set entrypoint script
 COPY ./php-starter.sh /usr/local/bin/php-starter.sh

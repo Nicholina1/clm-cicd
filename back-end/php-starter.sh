@@ -11,32 +11,39 @@ echo "DB_USERNAME: $DB_USERNAME"
 echo "DB_PASSWORD: ******"  # Mask sensitive data
 
 # Define a lock file path to track if migrations have already been run
-MIGRATION_LOCK_FILE="/var/www/storage/framework/migration.lock"
+# MIGRATION_LOCK_FILE="/var/www/storage/framework/migration.lock"
 
 # Function to check database connectivity
-check_database_connection() {
-    echo "⏳ Waiting for database connection..."
-    MAX_RETRIES=30
-    RETRY_INTERVAL=1
-    count=0
+# check_database_connection() {
+#     echo "⏳ Waiting for database connection..."
+#     MAX_RETRIES=30
+#     RETRY_INTERVAL=1
+#     count=0
 
-    until nc -z "$DB_HOST" "$DB_PORT"; do
-        count=$((count + 1))
-        if [ $count -ge $MAX_RETRIES ]; then
-            echo "❌ Database connection failed after $MAX_RETRIES retries. Exiting."
-            exit 1
-        fi
-        echo "⏳ Database not ready, retrying in $RETRY_INTERVAL second(s)..."
-        sleep $RETRY_INTERVAL
-    done
-    echo "✅ Database is ready!"
-}
+#     until nc -z "$DB_HOST" "$DB_PORT"; do
+#         count=$((count + 1))
+#         if [ $count -ge $MAX_RETRIES ]; then
+#             echo "❌ Database connection failed after $MAX_RETRIES retries. Exiting."
+#             exit 1
+#         fi
+#         echo "⏳ Database not ready, retrying in $RETRY_INTERVAL second(s)..."
+#         sleep $RETRY_INTERVAL
+#     done
+#     echo "✅ Database is ready!"
+# }
 
 # Function to run Laravel migrations and seeding
 run_migrations() {
     
     # php artisan migrate:fresh --seed
     php artisan migrate --force
+
+    # Clear cache and config
+    php artisan config:clear
+    php artisan cache:clear
+
+    # Generate a new application key (if needed)
+    php artisan key:generate
 
     # if [ ! -f "$MIGRATION_LOCK_FILE" ]; then
     #     echo "🚀 Running migrations and seeding..."
