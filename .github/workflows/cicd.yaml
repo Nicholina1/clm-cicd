@@ -74,7 +74,7 @@ jobs:
             DB_USERNAME=${{ env.DB_USERNAME }}
           secrets: |
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            APP_KEY=${{ secrets.APP_KEY }}
+
 
       - name: Build and push Next.js front-end
         uses: docker/build-push-action@v4
@@ -106,13 +106,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.CLM_CICD_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          echo "${{ secrets.IP }}" > ~/.ssh/known_hosts
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.CLM_CICD_KEY }}" | sed 's/\\n/\n/g' > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          touch ~/.ssh/known_hosts
           ssh-keyscan -H ${{ secrets.IP }} >> ~/.ssh/known_hosts
 
       - name: Test SSH connection
@@ -126,7 +120,7 @@ jobs:
           mkdir -p ~/app
           cd ~/app
 
-          cat > ${{ env.COMPOSE_FILE }} << 'COMPOSE'
+          cat > ${{ env.COMPOSE_FILE }} << 'EOT'
           version: '3.8'
           services:
             postgres:
@@ -134,18 +128,30 @@ jobs:
               networks:
                 - app-network
               environment:
+                POSTGRES_USER: ${{ env.DB_USERNAME }}
+                POSTGRES_DB: ${{ env.DB_DATABASE }}
                 POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
               ports:
                 - "5432:5432"
+              volumes:
+                - pgdata:/var/lib/postgresql/data
+
             backend:
               image: ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
               networks:
                 - app-network
               environment:
+                DB_CONNECTION: ${{ env.DB_CONNECTION }}
                 DB_HOST: postgres
+                DB_PORT: 5432
+                DB_DATABASE: ${{ env.DB_DATABASE }}
+                DB_USERNAME: ${{ env.DB_USERNAME }}
                 DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
               ports:
                 - "8000:8000"
+              depends_on:
+                - postgres
+
             frontend:
               image: ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
               networks:
@@ -154,10 +160,16 @@ jobs:
                 BACKEND_API_HOST: http://backend:8000
               ports:
                 - "3000:3000"
+              depends_on:
+                - backend
+  
+          volumes:
+            pgdata:
+
           networks:
             app-network:
               driver: bridge
-          COMPOSE
+          EOT
 
           echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u ${{ env.DOCKER_HUB_USERNAME }} --password-stdin
           docker compose -f ${{ env.COMPOSE_FILE }} pull
@@ -167,6 +179,7 @@ jobs:
           curl -I http://localhost:3000 || echo "Frontend not responding"
           curl -I http://localhost:8000 || echo "Backend not responding"
           DEPLOY
+
 
 
 

@@ -1,0 +1,172 @@
+name: Build, Push, and Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  # Docker Hub Configuration
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_PASSWORD }}
+  TIMESTAMP: ${{ github.run_id }}-${{ github.run_number }}
+  
+  # Application Configuration
+  BACKEND_API_HOST: https://api.yourdomain.com
+  DB_HOST: your-database-host.com
+  DB_CONNECTION: pgsql
+  DB_PORT: 5432
+  DB_DATABASE: laravel
+  DB_USERNAME: postgres
+
+  # AWS Configuration
+  AWS_REGION: us-east-1
+  EC2_INSTANCE: ${{ secrets.EC2_IP }}
+  COMPOSE_FILE: docker-compose.prod.yml
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ env.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push PostgreSQL image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.Postgres
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:${{ env.TIMESTAMP }}
+          build-args: |
+            POSTGRES_USER=${{ env.DB_USERNAME }}
+            POSTGRES_DB=${{ env.DB_DATABASE }}
+          secrets: |
+            POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+
+      - name: Build and push Laravel back-end
+        uses: docker/build-push-action@v4
+        with:
+          context: ./back-end
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:${{ env.TIMESTAMP }}
+          build-args: |
+            APP_ENV=production
+            DB_CONNECTION=${{ env.DB_CONNECTION }}
+            DB_HOST=${{ env.DB_HOST }}
+            DB_PORT=${{ env.DB_PORT }}
+            DB_DATABASE=${{ env.DB_DATABASE }}
+            DB_USERNAME=${{ env.DB_USERNAME }}
+          secrets: |
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            APP_KEY=${{ secrets.APP_KEY }}
+      - name: Build and push Next.js front-end
+        uses: docker/build-push-action@v4
+        with:
+          context: ./front-end
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:${{ env.TIMESTAMP }}
+          build-args: |
+            BACKEND_API_HOST=${{ env.BACKEND_API_HOST }}
+
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/githubaction_role
+          role-session-name: deploy-${{ github.run_id }}
+          audience: sts.amazonaws.com
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ env.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@${{ env.EC2_INSTANCE }} << 'EOF'
+            # Login to Docker Hub
+            echo "${{ env.DOCKER_HUB_TOKEN }}" | docker login -u ${{ env.DOCKER_HUB_USERNAME }} --password-stdin
+
+            # Pull latest images
+            docker pull ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
+            docker pull ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+            docker pull ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
+
+            # Create/update docker-compose.prod.yml
+            cat > ${{ env.COMPOSE_FILE }} << 'EOT'
+            version: '3.8'
+            services:
+              postgres:
+                image: ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
+                environment:
+                  POSTGRES_USER: ${{ env.DB_USERNAME }}
+                  POSTGRES_DB: ${{ env.DB_DATABASE }}
+                  POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+                ports:
+                  - "5432:5432"
+                volumes:
+                  - pgdata:/var/lib/postgresql/data
+              
+              backend:
+                image: ${{ env.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+                depends_on:
+                  - postgres
+                environment:
+                  DB_CONNECTION: ${{ env.DB_CONNECTION }}
+                  DB_HOST: postgres
+                  DB_PORT: ${{ env.DB_PORT }}
+                  DB_DATABASE: ${{ env.DB_DATABASE }}
+                  DB_USERNAME: ${{ env.DB_USERNAME }}
+                  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+                ports:
+                  - "8000:8000"
+              
+              frontend:
+                image: ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
+                environment:
+                  BACKEND_API_HOST: http://backend:8000
+                ports:
+                  - "3000:3000"
+                depends_on:
+                  - backend
+            
+            volumes:
+              pgdata:
+            EOT
+
+            # Deploy services
+            docker-compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans
+            docker-compose -f ${{ env.COMPOSE_FILE }} up -d
+
+            # Verify deployment
+            docker ps -a
+            curl -I http://localhost:3000
+          EOF
