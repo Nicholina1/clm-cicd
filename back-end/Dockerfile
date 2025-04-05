@@ -18,7 +18,7 @@ COPY . /var/www
 
 # Install Composer and Laravel dependencies
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
-     composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
+    composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
 
 # Stage 2: Production environment
 FROM php:8.3-cli
@@ -40,9 +40,9 @@ RUN chmod -R 775 storage
 # RUN chmod -R 775 bootstrap/cache
 
 # Set entrypoint script
-COPY ./php-starter.sh /usr/local/bin/php-starter.sh
-RUN chmod +x /usr/local/bin/php-starter.sh
-ENTRYPOINT ["/usr/local/bin/php-starter.sh"]
+# COPY ./php-starter.sh /usr/local/bin/php-starter.sh
+# RUN chmod +x /usr/local/bin/php-starter.sh
+# ENTRYPOINT ["/usr/local/bin/php-starter.sh"]
 
 # Expose port and run Laravel's built-in server
 EXPOSE 8000

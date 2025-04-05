@@ -1,43 +1,43 @@
 services:
-  # frontend:
-  #   container_name: clm_frontend
-  #   build: 
-  #     context: ./front-end
-  #     dockerfile: Dockerfile
-  #   env_file:
-  #     - ./front-end/.env
-  #   ports:
-  #     - "3000:3000"  
-  #   depends_on:
-  #     - backend
-  #   volumes:
-  #     - ./front-end:/app  
-  #   networks:
-  #     - clm-network
+  frontend:
+    container_name: clm_frontend
+    build:
+      context: ./front-end
+      dockerfile: Dockerfile
+    env_file:
+      - ./front-end/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./front-end:/app
+    networks:
+      - clm-network
 
-  # backend:
-  #   container_name: clm_backend
-  #   build:
-  #     context: ./back-end
-  #     dockerfile: Dockerfile
-  #   env_file:
-  #     - ./back-end/.env
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     DB_CONNECTION: pgsql
-  #     DB_HOST: db
-  #     DB_PORT: 5432
-  #     DB_DATABASE: laravel
-  #     DB_USERNAME: postgres
-  #     DB_PASSWORD: secret
-  #   depends_on:
-  #     - db
-  #   volumes:
-  #     - ./back-end:/var/www  
-  #     - ./back-end/storage:/var/www/storage  
-  #   networks:
-  #     - clm-network
+  backend:
+    container_name: clm_backend
+    build:
+      context: ./back-end
+      dockerfile: Dockerfile
+    env_file:
+      - ./back-end/.env
+    ports:
+      - "8000:8000"
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: laravel
+      DB_USERNAME: postgres
+      DB_PASSWORD: secret
+    depends_on:
+      - db
+    volumes:
+      - ./back-end:/var/www
+      - ./back-end/storage:/var/www/storage
+    networks:
+      - clm-network
 
   db:
     image: postgres:15
