@@ -37,6 +37,9 @@ COPY --from=builder /var/www /var/www
 WORKDIR /var/www
 # Set permissions for storage and bootstrap/cache
 RUN chmod -R 775 storage 
+
+RUN php artisan migrate --force && php artisan db:seed --force
+
 # RUN chmod -R 775 bootstrap/cache
 
 # Set entrypoint script

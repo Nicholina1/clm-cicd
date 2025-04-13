@@ -2,16 +2,16 @@ services:
   frontend:
     container_name: clm_frontend
     build:
-      context: ./front-end
+      context: ./frontend-old
       dockerfile: Dockerfile
     env_file:
-      - ./front-end/.env
+      - ./frontend-old/.env
     ports:
       - "3000:3000"
     depends_on:
       - backend
     volumes:
-      - ./front-end:/app
+      - ./frontend-old:/app
     networks:
       - clm-network
 

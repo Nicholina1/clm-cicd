@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Faker\Factory as Faker;
 
 class UserTableSeeder extends Seeder
 {
@@ -18,7 +17,7 @@ class UserTableSeeder extends Seeder
             'first_name' => "Default",
             'last_name' => "User",
             'email' => "admin@clms.com",
-            'phone' => $faker->numerify('##########'),
+            'phone' => "1234567890",
             'password' => bcrypt("admin")
         ]);
     }
