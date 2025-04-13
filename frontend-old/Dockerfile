@@ -1,41 +1,91 @@
 # Stage 1: Build the application
-FROM node:20-alpine AS builder
+FROM node:18-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files for dependency installation
-COPY package.json yarn.lock* package-lock.json* ./ 
+# Copy only package files to install dependencies first
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
-# Install dependencies (preferring yarn if available)
-RUN npm install
-
-# Copy the rest of the application
+# Copy source code and build
 COPY . .
-
-# Build the Next.js app
 RUN npm run build
 
 # Stage 2: Production image
-FROM node:20-alpine AS runner
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy only necessary files from the builder stage
-COPY --from=builder /app/package.json ./package.json
+# Copy essential files from builder stage
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 
-# Environment variables (if needed)
-# ENV NODE_ENV=production
-# ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
 
-# Expose the port Next.js runs on (default: 3000)
 EXPOSE 3000
 
-# Start the Next.js server
-CMD ["npm", "start"]
+# Use node directly instead of npm for better signal handling
+CMD ["node", "node_modules/.bin/next", "start"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # Stage 1: Build the application
+# FROM node:20-alpine AS builder
+
+# # Set working directory
+# WORKDIR /app
+
+# # Copy package files for dependency installation
+# COPY package.json yarn.lock* package-lock.json* ./ 
+
+# # Install dependencies (preferring yarn if available)
+# RUN npm install
+
+# # Copy the rest of the application
+# COPY . .
+
+# # Build the Next.js app
+# RUN npm run build
+
+# # Stage 2: Production image
+# FROM node:20-alpine AS runner
+
+# WORKDIR /app
+
+# # Copy only necessary files from the builder stage
+# COPY --from=builder /app/package.json ./package.json
+# COPY --from=builder /app/.next ./.next
+# COPY --from=builder /app/public ./public
+# COPY --from=builder /app/node_modules ./node_modules
+
+# # Environment variables (if needed)
+# # ENV NODE_ENV=production
+# # ENV NEXT_TELEMETRY_DISABLED=1
+
+# # Expose the port Next.js runs on (default: 3000)
+# EXPOSE 3000
+
+# # Start the Next.js server
+# CMD ["npm", "start"]
 
 
 
@@ -56,49 +106,3 @@ CMD ["npm", "start"]
 
 
 
-# # Stage 1: Install dependencies
-# FROM node:20-alpine AS deps
-# WORKDIR /app
-
-# # Install Netcat, Curl (optional debugging tools)
-# RUN apk add --no-cache netcat-openbsd curl
-
-# # Copy only the package files first for efficient caching
-# COPY package.json package-lock.json ./
-
-# # Install dependencies without dev dependencies
-# RUN npm ci --omit=dev
-
-# # Stage 2: Build the Next.js app
-# FROM node:20-alpine AS builder
-# WORKDIR /app
-
-# # Copy dependencies from deps stage
-# COPY --from=deps /app/package.json ./package.json
-
-# # Copy the rest of the application
-# COPY . .
-
-# # Set production environment
-# # ENV NODE_ENV=production
-
-# # Build Next.js app
-# RUN npm install  
-# RUN npm run build
-# RUN rm -rf node_modules
-
-# # Stage 3: Run the Next.js app (Final lightweight image)
-# FROM node:20-alpine AS runner
-# WORKDIR /app
-
-# # Copy only necessary files from builder stage
-# COPY --from=builder /app/package.json ./
-# COPY --from=builder /app/.next ./.next
-# COPY --from=builder /app/public ./public
-# COPY --from=deps /app/node_modules ./node_modules 
-
-# # Expose Next.js port
-# EXPOSE 3000
-
-# # Start the Next.js app
-# CMD ["npm", "start"]
