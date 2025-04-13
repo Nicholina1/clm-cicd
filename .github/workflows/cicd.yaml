@@ -85,7 +85,7 @@ jobs:
       - name: Build and push Next.js front-end
         uses: docker/build-push-action@v4
         with:
-          context: ./front-end
+          context: ./frontend-old
           push: true
           tags: |
             ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
