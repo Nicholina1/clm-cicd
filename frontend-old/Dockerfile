@@ -5,11 +5,11 @@ WORKDIR /app
 
 # Copy only package files to install dependencies first
 COPY package.json ./
-RUN npm run build --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Copy source code and build
 COPY . .
-
+RUN npm run build
 
 # Stage 2: Production image
 FROM node:18-alpine
