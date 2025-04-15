@@ -4,12 +4,12 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy only package files to install dependencies first
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+COPY package.json ./
+RUN npm run build --legacy-peer-deps
 
 # Copy source code and build
 COPY . .
-RUN npm run build
+
 
 # Stage 2: Production image
 FROM node:18-alpine
@@ -25,7 +25,7 @@ COPY --from=builder /app/node_modules ./node_modules
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV HOSTNAME=0.0.0.0
+# ENV HOSTNAME=0.0.0.0
 
 EXPOSE 3000
 
