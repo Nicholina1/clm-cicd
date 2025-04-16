@@ -97,15 +97,15 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # - name: Checkout code
+      #   uses: actions/checkout@v4
 
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-region: ${{ secrets.REGION }}
-          role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/githubaction_role
-          role-session-name: github-actions-deploy
+      # - name: Configure AWS credentials via OIDC
+      #   uses: aws-actions/configure-aws-credentials@v2
+      #   with:
+      #     aws-region: ${{ secrets.REGION }}
+      #     role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/githubaction_role
+      #     role-session-name: github-actions-deploy
 
       - name: Install SSH key
         run: |
