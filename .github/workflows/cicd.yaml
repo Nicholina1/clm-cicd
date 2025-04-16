@@ -129,7 +129,7 @@ jobs:
           cat > ${{ env.COMPOSE_FILE }} << 'EOT'
           version: '3.8'
           services:
-            postgres:
+            db:
               image: ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
               networks:
                 - app-network
@@ -156,7 +156,7 @@ jobs:
               ports:
                 - "8000:8000"
               depends_on:
-                - postgres
+                - db
 
             frontend:
               image: ${{ env.DOCKER_HUB_USERNAME }}/nextjs-frontend:latest
