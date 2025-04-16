@@ -107,6 +107,16 @@ jobs:
       #     role-to-assume: arn:aws:iam::${{ secrets.ACCOUNT_ID }}:role/githubaction_role
       #     role-session-name: github-actions-deploy
 
+      - name: Aggressively clean up disk space
+        run: |
+          # Remove unused Docker images, containers, and volumes
+          docker system prune -af --volumes
+          # Remove additional temporary files
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet
+          sudo apt-get clean
+          # Reclaim space from orphaned Docker layers
+          docker builder prune -af
+          
       - name: Install SSH key
         run: |
           mkdir -p ~/.ssh
