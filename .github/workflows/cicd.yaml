@@ -137,7 +137,6 @@ jobs:
           cd ~/app
 
           cat > ${{ env.COMPOSE_FILE }} << 'EOT'
-          version: '3.8'
           services:
             db:
               image: ${{ env.DOCKER_HUB_USERNAME }}/postgres-db:latest
