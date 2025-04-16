@@ -50,10 +50,9 @@ RUN chown -R www-data:www-data /var/www \
 # RUN chmod -R 775 bootstrap/cache
 
 # Set entrypoint script
-# COPY ./php-starter.sh /usr/local/bin/php-starter.sh
-# RUN chmod +x /usr/local/bin/php-starter.sh
-# ENTRYPOINT ["/usr/local/bin/php-starter.sh"]
-
+COPY ./scripts .
+RUN chmod +x scripts/php-starter.sh
+ENTRYPOINT ["scripts/php-starter.sh"]
 # Expose port and run Laravel's built-in server
 EXPOSE 8000
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
