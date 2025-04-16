@@ -16,6 +16,10 @@ RUN docker-php-ext-enable gd zip exif
 WORKDIR /var/www
 COPY . /var/www
 
+RUN mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} \
+    && chmod -R 775 bootstrap/cache storage \
+    && chown -R www-data:www-data bootstrap/cache storage
+
 # Install Composer and Laravel dependencies
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer 
 
@@ -37,8 +41,10 @@ COPY --from=builder /var/www /var/www
 
 WORKDIR /var/www
 # Set permissions for storage and bootstrap/cache
-RUN chmod -R 775 storage 
+# RUN chmod -R 775 storage 
 
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 775 storage bootstrap/cache
 # RUN php artisan migrate --force && php artisan db:seed --force
 
 # RUN chmod -R 775 bootstrap/cache
