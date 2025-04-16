@@ -17,8 +17,9 @@ WORKDIR /var/www
 COPY . /var/www
 
 # Install Composer and Laravel dependencies
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
-    composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer 
+
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
 
 # Stage 2: Production environment
 FROM php:8.3-cli
