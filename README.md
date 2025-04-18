@@ -96,7 +96,7 @@ Orchestrates services including:
 
 - PHP backend
 - PostgreSQL database
-- (Optional) Frontend
+- Frontend
 
 ### Dockerfile.Postgres
 
